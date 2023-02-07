@@ -37,3 +37,17 @@ BRANCHES=<space seperated list of branches that should be split from the REPO, u
 
 With this configuration file in place, split-repo can be run as follows: `split-repo.sh <config_file>`
 
+### Large Binary Files
+
+If you have large binary files in your repository, over time, this becomes a significant drag. Git is not
+well suited to handle binary files. While you may want to consider using [git-lfs](), the optimal solution
+is to utilize a package manager for your binaries. In any case, [git-filter-repo]() is available to filter any
+large binaries in your repository. `slim-repo.sh` can be used to automatically do this. To run `slim-repo.sh`, 
+you must first create a configuration file with the following values:
+
+```shell
+NEW_REPO=<fully qualified path to the new, ligth-weight repo that will be created>
+SLIMMED_PATH=<path of the repo that has been 'slimmed'>
+FILTER_EXTENSIONS=<comma seperated string of .<extension>, e.g. ".exe,.dll">
+FILTER_ADDITIONAL=<comma seperated string of additional paths that should be filtered>
+```
