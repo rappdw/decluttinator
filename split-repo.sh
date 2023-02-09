@@ -8,8 +8,6 @@ if [ $# -ne 1 ]; then
   exit 1
 fi
 
-DIR=$(dirname $(readlink -f "$0"))
-
 COMMIT_MESSAGE=$(cat <<-END
 Split branch BRANCH from the historical repo
 
@@ -31,7 +29,8 @@ END
 )
 
 # set environment variables from config file
-source $1
+# shellcheck disable=SC1090
+source "$1"
 
 # test to ensure REPO and NEW_REPO in environment
 if [[ -z "$REPO" || -z "$HISTORICAL_REPO" || -z "$NEW_REPO" || -z "$BRANCHES" ]]; then
@@ -40,61 +39,107 @@ if [[ -z "$REPO" || -z "$HISTORICAL_REPO" || -z "$NEW_REPO" || -z "$BRANCHES" ]]
 fi
 
 
-git clone --no-local $REPO $HISTORICAL_REPO
-pushd $HISTORICAL_REPO
+git clone --bare --no-local "$REPO" "$HISTORICAL_REPO"
+pushd "$HISTORICAL_REPO"
 
 for BRANCH in $BRANCHES; do
-  git checkout $BRANCH
-  TIP=$(git rev-list -n 1 $BRANCH)
+  TIP=$(git rev-list -n 1 "$BRANCH")
   # create terminal commit for existing branch
+  # shellcheck disable=SC2001
   BRANCH_COMMIT_MESSAGE=$(sed "s|BRANCH|$BRANCH|g" <<< "$COMMIT_MESSAGE")
-  TERMINAL_TIP=$(git commit-tree -m "$BRANCH_COMMIT_MESSAGE" -p $TIP $TIP^{tree})
-  git update-ref refs/heads/$BRANCH $TERMINAL_TIP
+  TERMINAL_TIP=$(git commit-tree -m "$BRANCH_COMMIT_MESSAGE" -p "$TIP" "$TIP^{tree}")
+  git update-ref refs/heads/"$BRANCH" "$TERMINAL_TIP"
 done
 
 popd
 TEMP_REPO=$HISTORICAL_REPO.tmp
-git clone --no-local $HISTORICAL_REPO $TEMP_REPO
-pushd $TEMP_REPO
+git clone --no-local "$HISTORICAL_REPO" "$TEMP_REPO"
+pushd "$TEMP_REPO"
 
 for BRANCH in $BRANCHES; do
-  git checkout $BRANCH
-  TIP=$(git rev-list -n 1 $BRANCH)
-  TIP_PARENT=$(git rev-list -n 1 --skip=1 $BRANCH)
+  git checkout "$BRANCH"
+  TIP=$(git rev-list -n 1 "$BRANCH")
+  TIP_PARENT=$(git rev-list -n 1 --skip=1 "$BRANCH")
   # create the new branch of development (parentless)
+  # shellcheck disable=SC2001
   BRANCH_COMMIT_MESSAGE=$(sed "s|BRANCH|$BRANCH|g" <<< "$COMMIT_MESSAGE")
-  NEW_TREE=$(git commit-tree -m "$BRANCH_COMMIT_MESSAGE" $TIP_PARENT^{tree})
-  git rebase --onto $NEW_TREE $TIP
+  NEW_TREE=$(git commit-tree -m "$BRANCH_COMMIT_MESSAGE" "$TIP_PARENT^{tree}")
+  git rebase --onto "$NEW_TREE" "$TIP"
 done
 
 popd
 
-mkdir -p $NEW_REPO
-pushd $NEW_REPO
+mkdir -p "$NEW_REPO"
+pushd "$NEW_REPO"
 git --bare init
 popd
-pushd $TEMP_REPO
-git remote add declutter $NEW_REPO
+pushd "$TEMP_REPO"
+git remote add declutter "$NEW_REPO"
 
 for BRANCH in $BRANCHES; do
-  git push -u declutter $BRANCH
+  git push -u declutter "$BRANCH"
 done
 
 popd
 
-rm -rf $TEMP_REPO
+rm -rf "$TEMP_REPO"
 
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
-echo ""
-echo ""
-echo -e "${GREEN}New repo is available at${NC} $NEW_REPO${GREEN}."
-echo -e "Historcial repo is available at ${NC}$HISTORICAL_REPO"
-echo ""
-echo "If you are satisfied with the results you should push $HISTORICAL_REPO back to origin"
-echo ""
-echo "Work still needs to be done to remove the cruft in $NEW_REPO"
-echo "run slim-repo.sh against the new_repo_dir to do so."
-echo ""
-echo "Once that is complete, $NEW_REPO can be pushed to a new repo on the server."
+function final_cleanup {
+  pushd "$1"
+  git reflog expire --expire=now --all
+  git gc --prune=now
+  popd
+}
+
+if [[ -z "$SLIMMED_PATH" ]]; then
+  final_cleanup "$HISTORICAL_REPO"
+  final_cleanup "$NEW_REPO"
+  echo ""
+  echo ""
+  echo -e "${GREEN}New repo is available at ${NC}$NEW_REPO${GREEN}."
+  echo -e "Historical repo is available at ${NC}$HISTORICAL_REPO"
+  echo ""
+  echo "If you are satisfied with the results you should push $HISTORICAL_REPO back to origin"
+  echo ""
+  echo "Work still needs to be done to remove the cruft in $NEW_REPO"
+  echo "run slim-repo.sh against the new_repo_dir to do so."
+  echo ""
+  echo "Once that is complete, $NEW_REPO can be pushed to a new repo on the server."
+else
+  final_cleanup "$HISTORICAL_REPO"
+
+  DIR=$(dirname "$(readlink -f "$0")")
+  "$DIR"/slim-repo.sh "$1"
+  rm -rf "$NEW_REPO"
+  git clone --bare --no-local "$SLIMMED_PATH" "$NEW_REPO"
+  rm -rf "$SLIMMED_PATH"
+  pushd "$NEW_REPO"
+  git remote remove origin
+  popd
+
+  echo ""
+  echo ""
+  echo -e "${GREEN}New repo is available at ${NC}$NEW_REPO${GREEN}."
+  echo -e "Historical repo is available at ${NC}$HISTORICAL_REPO"
+  echo ""
+  echo "If you are satisfied with the results you should push $HISTORICAL_REPO back to origin and"
+  echo "push $NEW_REPO to a new repo on the server."
+fi
+
+
+
+
+
+# the new repo has an issue checking out some branches...
+# git worktree add project/morpheus
+# returns:fatal: not a valid object name: 'HEAD'
+# that's because:
+# git symbolic-ref HEAD
+#   refs/heads/main
+# which is non-existent
+#
+# git symbolic-ref HEAD refs/heads/project/morpheus
+# fixes the issue
