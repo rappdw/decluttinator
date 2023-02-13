@@ -7,8 +7,6 @@ def process_analysis(directory, extensions, additional):
     # parse string of comma seperated strings to an array of strings
     filtered_extensions = extensions.split(',')
     additional_filters = additional.split(',')
-    print(filtered_extensions)
-    print(additional_filters)
     filtered_paths = []
     # open directory/filter-repo/blob-shas-and-paths.txt
     with open(f"{directory}/blob-shas-and-paths.txt", "r") as f:

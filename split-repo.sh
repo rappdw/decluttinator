@@ -11,20 +11,17 @@ fi
 COMMIT_MESSAGE=$(cat <<-END
 Split branch BRANCH from the historical repo
 
-This is the last commit on the BRANCH branch of the historical repo and
-the first commit on that branch in the new repo.
+This is the last commit on the BRANCH branch of the historical repo and the first commit on
+that branch in the new repo.
 
-Should you desire to view morpheus within the historical context, you can still
+Should you desire to view the work in the new repository in historical context, you can still
 do so. Use join-repo.sh or do the following
 
 1. git clone <new_repo_url> <path_to_view_in_context>
 2. cd <path_to_view_in_context>
 3. git remote add historical <historical_repo_url>
 4. git fetch historical
-5. git replace <new_tail> <historical_tip>
-
-where: <historical_tip> is this commit in <historical_repo_url> and <new_tail> is this commit
-in <new_repo_url>
+5. git replace $(git rev-list -n 1 decluttinator/initial/BRANCH) $(git rev-list -n 1 decluttinator/terminal/BRANCH)
 END
 )
 
@@ -38,16 +35,19 @@ if [[ -z "$REPO" || -z "$HISTORICAL_REPO" || -z "$NEW_REPO" || -z "$BRANCHES" ]]
   exit 1
 fi
 
-
+# clone the repo we are going to split
 git clone --bare --no-local "$REPO" "$HISTORICAL_REPO"
 pushd "$HISTORICAL_REPO"
 
+# for each branch, identify the last commit within the historical repo. Create a final commit on those
+# branches that has info about the split. For completeness we also create a tag for that final commit
 for BRANCH in $BRANCHES; do
   TIP=$(git rev-list -n 1 "$BRANCH")
   # create terminal commit for existing branch
   # shellcheck disable=SC2001
   BRANCH_COMMIT_MESSAGE=$(sed "s|BRANCH|$BRANCH|g" <<< "$COMMIT_MESSAGE")
   TERMINAL_TIP=$(git commit-tree -m "$BRANCH_COMMIT_MESSAGE" -p "$TIP" "$TIP^{tree}")
+  git tag -a decluttinator/terminal/"$BRANCH" -m "Final commit on $BRANCH branch" "$TERMINAL_TIP"
   git update-ref refs/heads/"$BRANCH" "$TERMINAL_TIP"
 done
 
@@ -65,6 +65,7 @@ for BRANCH in $BRANCHES; do
   BRANCH_COMMIT_MESSAGE=$(sed "s|BRANCH|$BRANCH|g" <<< "$COMMIT_MESSAGE")
   NEW_TREE=$(git commit-tree -m "$BRANCH_COMMIT_MESSAGE" "$TIP_PARENT^{tree}")
   git rebase --onto "$NEW_TREE" "$TIP"
+  git tag -a decluttinator/initial/"$BRANCH" -m "Initial commit on $BRANCH branch" "$NEW_TREE"
 done
 
 popd
@@ -78,6 +79,7 @@ git remote add declutter "$NEW_REPO"
 
 for BRANCH in $BRANCHES; do
   git push -u declutter "$BRANCH"
+  git push -u declutter decluttinator/initial/"$BRANCH"
 done
 
 popd
@@ -128,18 +130,3 @@ else
   echo "If you are satisfied with the results you should push $HISTORICAL_REPO back to origin and"
   echo "push $NEW_REPO to a new repo on the server."
 fi
-
-
-
-
-
-# the new repo has an issue checking out some branches...
-# git worktree add project/morpheus
-# returns:fatal: not a valid object name: 'HEAD'
-# that's because:
-# git symbolic-ref HEAD
-#   refs/heads/main
-# which is non-existent
-#
-# git symbolic-ref HEAD refs/heads/project/morpheus
-# fixes the issue
