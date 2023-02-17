@@ -21,7 +21,7 @@ do so. Use join-repo.sh or do the following
 2. cd <path_to_view_in_context>
 3. git remote add historical <historical_repo_url>
 4. git fetch historical
-5. git replace $(git rev-list -n 1 decluttinator/initial/BRANCH) $(git rev-list -n 1 decluttinator/terminal/BRANCH)
+5. git replace \$(git rev-list -n 1 decluttinator/initial/BRANCH) \$(git rev-list -n 1 decluttinator/terminal/BRANCH)
 END
 )
 
@@ -99,6 +99,9 @@ function final_cleanup {
 if [[ -z "$SLIMMED_PATH" ]]; then
   final_cleanup "$HISTORICAL_REPO"
   final_cleanup "$NEW_REPO"
+  pushd "$NEW_REPO"
+  git symbolic-ref HEAD refs/heads/"${BRANCHES[0]}"
+  popd
   echo ""
   echo ""
   echo -e "${GREEN}New repo is available at ${NC}$NEW_REPO${GREEN}."
@@ -120,6 +123,7 @@ else
   rm -rf "$SLIMMED_PATH"
   pushd "$NEW_REPO"
   git remote remove origin
+  git symbolic-ref HEAD refs/heads/"${BRANCHES[0]}"
   popd
 
   echo ""

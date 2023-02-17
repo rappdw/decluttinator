@@ -23,14 +23,14 @@ fi
 
 git clone --no-local "$NEW_REPO" "$JOINED_PATH"
 pushd "$JOINED_PATH"
-git add remote history "$HISTORICAL_REPO"
+git remote add history "$HISTORICAL_REPO"
 git remote set-url --push history '** PUSH DISABLED **'
 git fetch history
 
 
 for BRANCH in $BRANCHES; do
-  BRANCH_TAIL=$(git log "$BRANCH" --oneline | tail -1 | cut -f 1 -w)
-  BRANCH_HISTORY_TIP=$(git rev-list -n 1 --skip=1 history/"$BRANCH")
+  BRANCH_TAIL=$(git rev-list -n 1 decluttinator/initial/"$BRANCH")
+  BRANCH_HISTORY_TIP=$(git rev-list -n 1 decluttinator/terminal/"$BRANCH")
   # graft the new repo history onto the historical repo
   git replace --graft "$BRANCH_TAIL" "$BRANCH_HISTORY_TIP"
 done
